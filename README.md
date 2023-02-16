@@ -33,6 +33,13 @@ py -m pip install --upgrade pip
 pip install pybit
 ```
 
+Создать файл .env с двумя переменными:
+
+```
+api_key = 'Ваш api-key'
+secret = 'Ваш secret-key'
+```
+
 Запустить программу:
 
 ```
