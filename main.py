@@ -37,7 +37,7 @@ def change(ticker):
 def get_ethbtc():
     """Получаем список изменений цены ETH к BTC
     """
-    kline_eth = session.query_kline(    # получить свечи
+    kline_eth = session.query_kline(
         symbol=ETHUSDT,
         interval=INTERVAL,
         limit=100,
@@ -45,11 +45,11 @@ def get_ethbtc():
     )
     kline_eth = kline_eth['result']
     eth_prices = []
-    for each in kline_eth:              # из каждой свечи
-        close = each['close']           # берем данные о закрытии
-        eth_prices.append(close)        # накапливаем в списке
+    for each in kline_eth:
+        close = each['close']
+        eth_prices.append(close)
 
-    kline_btc = session.query_kline(    # получить свечи
+    kline_btc = session.query_kline(
         symbol=BTCUSDT,
         interval=INTERVAL,
         limit=100,
@@ -57,9 +57,9 @@ def get_ethbtc():
     )
     kline_btc = kline_btc['result']
     btc_prices = []
-    for each in kline_btc:          # из каждой свечи
-        close = each['close']       # берем данные о закрытии
-        btc_prices.append(close)    # накапливаем в списке
+    for each in kline_btc:
+        close = each['close']
+        btc_prices.append(close)
     ethbtc_prices = [eth/btc for eth, btc in zip(eth_prices, btc_prices)]
 
     return change(ethbtc_prices)
