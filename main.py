@@ -1,98 +1,52 @@
 import os
 import time
 
-from pybit import usdt_perpetual
-
+import pandas as pd
+import requests
+import statsmodels.api as sm
 from dotenv import load_dotenv
 
 load_dotenv()
 
-api_key = os.getenv('api_key')
-secret = os.getenv('secret')
+# Настройки API биржи
+ETHUSDT_URL = "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT"
+BTCUSDT_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+API_KEY = os.getenv('api_key')
+
+# Задаем порог изменения цены за 60 минут (в процентах)
+PRICE_CHANGE_THRESHOLD = 1
 
 
-session = usdt_perpetual.HTTP(
-        endpoint='https://api.bybit.com',
-        api_key=api_key,
-        api_secret=secret,
-    )
-
-ETHUSDT = 'ETHUSDT'
-BTCUSDT = 'BTCUSDT'
-LIMIT = 60          # кол-во свечей
-INTERVAL = 1        # минутные свечи
-
-
-def change(ticker):
-    """Записываем изменения цены закрытия от свечи к свече.
-    """
-    change_ethbtc = []
-    for i in range(1, len(ticker)):
-        x = (ticker[i - 1] / ticker[i]) * 100 - 100
-        change_ethbtc.append(x)
-
-    return change_ethbtc
+# Создаем функцию для вычисления движений ETHUSDT без влияния BTCUSDT
+def calculate_eth_price(df):
+    X = df["btc_price"]
+    y = df["eth_price"]
+    X = sm.add_constant(X)
+    model = sm.OLS(y, X).fit()
+    eth_price_without_btc = model.predict([1, 0])[0]
+    eth_price_with_btc = model.predict([1, df.iloc[-1]["btc_price"]])[0]
+    eth_price_change = (eth_price_with_btc - eth_price_without_btc) / eth_price_without_btc * 100
+    return eth_price_change
 
 
-def get_ethbtc():
-    """Получаем список изменений цены ETH к BTC
-    """
-    kline_eth = session.query_kline(
-        symbol=ETHUSDT,
-        interval=INTERVAL,
-        limit=100,
-        from_time=int(time.time() - LIMIT * 60)
-    )
-    kline_eth = kline_eth['result']
-    eth_prices = []
-    for each in kline_eth:
-        close = each['close']
-        eth_prices.append(close)
-
-    kline_btc = session.query_kline(
-        symbol=BTCUSDT,
-        interval=INTERVAL,
-        limit=100,
-        from_time=int(time.time() - LIMIT * 60)
-    )
-    kline_btc = kline_btc['result']
-    btc_prices = []
-    for each in kline_btc:
-        close = each['close']
-        btc_prices.append(close)
-    ethbtc_prices = [eth/btc for eth, btc in zip(eth_prices, btc_prices)]
-
-    return change(ethbtc_prices)
-
-
-def main():
-    """Получаем изменение цены ETHUSDT с учётом изменения цены ETH к BTC,
-    просто складываем значения, исходя из теории,
-    что рост цены ETH к BTC усиливает собственный рост ETHUSDT,
-    а снижение - ослабевает.
-    """
-    kline = session.query_kline(
-        symbol=ETHUSDT,
-        interval=INTERVAL,
-        limit=100,
-        from_time=int(time.time() - LIMIT * 60)
-    )
-    kline = kline['result']
-    eth_prices = []
-    for each in kline:
-        close = each['close']
-        eth_prices.append(close)
-    change_ethusdt = change(eth_prices)
-    change_ethbtc = get_ethbtc()
-    return_data = [
-        eth + btc for eth, btc in zip(change_ethusdt, change_ethbtc)
-    ]
-    gap = sum(return_data)
-    if gap >= 1:
-        print(f'Цена за час изменилась на {gap:.4f}%')
-    time.sleep(5)
-    main()
-
-
-if __name__ == '__main__':
-    main()
+# Цикл для постоянного чтения данных и вычисления движений ETHUSDT
+while True:
+    # Получаем актуальные цены фьючерсов ETHUSDT и BTCUSDT с API
+    headers = {"x-api-key": API_KEY}
+    eth_response = requests.get(ETHUSDT_URL, headers=headers).json()
+    btc_response = requests.get(BTCUSDT_URL, headers=headers).json()
+    eth_price = eth_response["price"]
+    btc_price = btc_response["price"]
+    # Сохраняем цены в DataFrame для регрессионного анализа
+    data = pd.DataFrame({
+        "eth_price": [eth_price],
+        "btc_price": [btc_price]
+    })
+    # Вычисляем изменение цены за последний час
+    # и выводим сообщение в консоль при необходимости
+    if len(data) >= 6:
+        eth_price_change = calculate_eth_price(data)
+        if abs(eth_price_change) >= PRICE_CHANGE_THRESHOLD:
+            print(f"Цена ETHUSDT изменилась на {eth_price_change:.2f}% за последний час")
+    # Ждем 10 секунд перед следующим запросом
+    time.sleep(10)
