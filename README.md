@@ -54,5 +54,5 @@ api_key = 'Ваш api-key'
 py main.py
 ```
 
-#### Автор
+### Автор:
 [Астапов Артём](https://github.com/Astapoff)
